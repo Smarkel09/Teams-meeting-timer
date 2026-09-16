@@ -540,7 +540,7 @@
     });
 
     nextBtn.addEventListener('click', () => {
-        const nameUsed = currentNameInput.value.trim() || `Presenter \${currentPresenterIndex}`;
+        const nameUsed = currentNameInput.value.trim() || `Presenter ${currentPresenterIndex}`;
         const actualTimeSpent = secondsSpentInCurrentPhase;
         const individualVariance = allotedTimePerPresenter - actualTimeSpent;
 
@@ -558,7 +558,7 @@
         updateVarianceUI();
 
         currentPresenterIndex++;
-        currentNameInput.value = `Presenter \${currentPresenterIndex}`;
+        currentNameInput.value = `Presenter ${currentPresenterIndex}`;
         
         timeLeft = allotedTimePerPresenter;
         startPresenterCountdown();
@@ -568,7 +568,7 @@
         clearInterval(presenterInterval);
         clearInterval(overallInterval);
 
-        const nameUsed = currentNameInput.value.trim() || `Presenter \${currentPresenterIndex}`;
+        const nameUsed = currentNameInput.value.trim() || `Presenter ${currentPresenterIndex}`;
         const actualTimeSpent = secondsSpentInCurrentPhase;
         const individualVariance = allotedTimePerPresenter - actualTimeSpent;
 
@@ -588,7 +588,7 @@
         const meetingRemainingSec = Math.floor((targetEndTime - endTimeObj) / 1000);
         const totalDurationSec = Math.floor((endTimeObj - actualMeetingStart) / 1000);
         
-        const scheduleStatusStr = meetingRemainingSec >= 0 ? `\${formatTime(meetingRemainingSec)} Remaining` : `\${formatTime(meetingRemainingSec)} Long`;
+        const scheduleStatusStr = meetingRemainingSec >= 0 ? `${formatTime(meetingRemainingSec)} Remaining` : `${formatTime(meetingRemainingSec)} Long`;
 
         let summaryHtml = `<div class="summary-row">Total Meeting Duration: <span class="summary-val">\${formatTime(totalDurationSec)}</span></div>`;
         summaryHtml += `<div class="summary-row">Schedule Status vs Hard Stop: <span class="summary-val">\${scheduleStatusStr}</span></div>`;
