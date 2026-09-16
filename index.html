@@ -74,37 +74,61 @@
         .timeline-wrapper {
             width: 100%;
             background-color: #f3f2f1;
-            height: 30px;
+            height: 25px;
             border-radius: 6px;
-            margin: 20px 0;
+            margin: 20px 0 5px 0;
             overflow: hidden;
             display: flex;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
         }
         .timeline-segment {
             height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 0.75rem;
-            font-weight: bold;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
             transition: width 0.3s ease;
-            padding: 0 2px;
         }
         .seg-intro { background-color: #8f64ab; }
-        .seg-presenter { background-color: #0078d4; border-right: 1px solid rgba(255,255,255,0.3); }
+        .seg-presenter { background-color: #0078d4; border-right: 1px solid rgba(255,255,255,0.4); }
         .seg-current { background-color: #107c41; animation: pulse 2s infinite; }
-        .seg-qa { background-color: #ffb900; color: #242424; }
-        .seg-remaining { background-color: #e1dfdd; color: #605e5c; }
+        .seg-qa { background-color: #ffb900; }
+        .seg-remaining { background-color: #e1dfdd; }
 
         @keyframes pulse {
             0% { opacity: 0.85; }
             50% { opacity: 1; }
             100% { opacity: 0.85; }
+        }
+
+        .legend-container {
+            width: 100%;
+            text-align: left;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            color: #242424;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            padding: 5px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        .legend-arrow {
+            margin: 0 6px;
+            color: #605e5c;
+            font-weight: bold;
+        }
+        .legend-time {
+            color: #605e5c;
+            margin-left: auto;
+            font-variant-numeric: tabular-nums;
         }
 
         .wall-clock-box {
@@ -191,6 +215,7 @@
     </div>
 
     <div class="timeline-wrapper" id="timeline-bar" style="display: none;"></div>
+    <div class="legend-container" id="legend-list"></div>
 
     <div class="timer-display" id="timer">00:00</div>
     
@@ -255,6 +280,7 @@
     const wallBox = document.getElementById('wall-box');
     const wallCountdownEl = document.getElementById('wall-countdown');
     const timelineBar = document.getElementById('timeline-bar');
+    const legendList = document.getElementById('legend-list');
     const reportPanel = document.getElementById('report-panel');
     const reportBody = document.getElementById('report-body');
 
@@ -269,19 +295,33 @@
         return `${sign}${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
 
+    function createLegendItem(colorClass, labelText, duration) {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `
+            <div class="legend-color ${colorClass}"></div>
+            <span>${labelText}</span>
+            <span class="legend-arrow">➔</span>
+            <span class="legend-time">${formatTime(duration)}</span>
+        `;
+        return item;
+    }
+
     function drawTimeline() {
         if (!totalMeetingSeconds) return;
         timelineBar.innerHTML = '';
+        legendList.innerHTML = '';
 
         completedSegments.forEach(seg => {
             const widthPct = (seg.duration / totalMeetingSeconds) * 100;
             if (widthPct <= 0) return;
+            
             const div = document.createElement('div');
             div.className = `timeline-segment ${seg.className}`;
             div.style.width = `${widthPct}%`;
-            div.textContent = seg.label;
-            div.title = `${seg.label} (${formatTime(seg.duration)})`;
             timelineBar.appendChild(div);
+
+            legendList.appendChild(createLegendItem(seg.className, seg.label, seg.duration));
         });
 
         const activeWidthPct = (secondsSpentInCurrentPhase / totalMeetingSeconds) * 100;
@@ -290,8 +330,10 @@
             const isIntro = startBtn.style.display === 'none' && introBtn.style.display === 'block';
             div.className = `timeline-segment seg-current`;
             div.style.width = `${activeWidthPct}%`;
-            div.textContent = isIntro ? "Intro" : currentNameInput.value;
             timelineBar.appendChild(div);
+
+            const activeLabel = isIntro ? "Leadership Intro (Active)" : `${currentNameInput.value} (Active)`;
+            legendList.appendChild(createLegendItem('seg-current', activeLabel, secondsSpentInCurrentPhase));
         }
 
         const qaSeconds = (parseInt(qaInput.value) || 0) * 60;
@@ -300,8 +342,9 @@
             const div = document.createElement('div');
             div.className = 'timeline-segment seg-qa';
             div.style.width = `${qaWidthPct}%`;
-            div.textContent = 'Q&A';
             timelineBar.appendChild(div);
+
+            legendList.appendChild(createLegendItem('seg-qa', 'Scheduled Q&A Hold Buffer', qaSeconds));
         }
 
         const totalUsedSoFar = completedSegments.reduce((sum, s) => sum + s.duration, 0) + secondsSpentInCurrentPhase + qaSeconds;
@@ -311,7 +354,6 @@
             const div = document.createElement('div');
             div.className = 'timeline-segment seg-remaining';
             div.style.width = `${remWidthPct}%`;
-            div.textContent = '';
             timelineBar.appendChild(div);
         }
     }
@@ -401,6 +443,7 @@
         introBtn.style.display = 'block'; 
         wallBox.style.display = 'block';
         timelineBar.style.display = 'flex';
+        legendList.style.display = 'flex';
         
         timerEl.textContent = "INTRO";
         timerEl.style.color = '#8f64ab';
@@ -428,7 +471,7 @@
         }
 
         completedSegments.push({
-            label: 'Intro',
+            label: 'Leadership Intro',
             duration: secondsSpentInCurrentPhase,
             className: 'seg-intro'
         });
