@@ -319,14 +319,14 @@
     const csvDownloadBtn = document.getElementById('csv-download-btn');
 
     const defaultTime = new Date(Date.now() + 30 * 60000);
-    endTimeInput.value = String(defaultTime.getHours()).padStart(2,'0') + ":" + String(defaultTime.getMinutes()).padStart(2,'0');
+    endTimeInput.value = String(defaultTime.getHours()).padStart(2,'0') + ':' + String(defaultTime.getMinutes()).padStart(2,'0');
 
     function formatTime(seconds) {
         const absSec = Math.abs(seconds);
         const mins = Math.floor(absSec / 60);
         const secs = absSec % 60;
         const sign = seconds < 0 ? "-" : "";
-        return sign + String(mins).padStart(2, '0') + ":" + String(secs).padStart(2, '0');
+        return sign + String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
     }
 
     function createLegendItem(colorClass, labelText, duration) {
@@ -426,15 +426,18 @@
     function startOverallMeetingClock() {
         actualMeetingStart = new Date();
         startTime = new Date();
-        const [hours, minutes] = endTimeInput.value.split(':');
+        const parts = endTimeInput.value.split(':');
         targetEndTime = new Date();
-        targetEndTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        targetEndTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
 
         if (targetEndTime < startTime) {
             targetEndTime.setDate(targetEndTime.getDate() + 1); 
         }
 
         totalMeetingSeconds = Math.floor((targetEndTime - startTime) / 1000);
+        if (totalMeetingSeconds <= 0) {
+            totalMeetingSeconds = 3600; 
+        }
 
         overallInterval = setInterval(() => {
             const now = new Date();
@@ -451,14 +454,12 @@
     }
 
     function buildCSVAndLink() {
-        let csvContent = "Presenter Name,Allotted Time,Actual Time Used,Variance (Seconds)
-";
+        let csvContent = "Presenter Name,Allotted Time,Actual Time Used,Variance (Seconds)\n";
         completedSegments.forEach(seg => {
             let allottedStr = seg.allotted ? formatTime(seg.allotted) : "N/A";
             let actualStr = formatTime(seg.duration);
             let varianceStr = seg.variance !== undefined ? seg.variance : "N/A";
-            csvContent += '"' + seg.label + '","' + allottedStr + '","' + actualStr + '","' + varianceStr + '"
-';
+            csvContent += '"' + seg.label + '","' + allottedStr + '","' + actualStr + '","' + varianceStr + '"\n';
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -469,18 +470,13 @@
     }
 
     startBtn.addEventListener('click', () => {
-        const [hours, minutes] = endTimeInput.value.split(':');
+        const parts = endTimeInput.value.split(':');
         let checkTime = new Date();
-        checkTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-        if (checkTime < new Date()) checkTime.setDate(checkTime.getDate() + 1);
-        
-        const availableTotalSeconds = Math.floor((checkTime - new Date()) / 1000);
-        const qaBufferSeconds = (parseInt(qaInput.value) || 0) * 60;
-        
-        if (availableTotalSeconds - qaBufferSeconds <= 0) {
-            alert("The scheduled end time has already passed or is too short for the configured Q&A buffer! Adjusting parameters to allow starting.");
+        checkTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+        if (checkTime < new Date()) {
+            checkTime.setDate(checkTime.getDate() + 1);
         }
-
+        
         setupPanel.style.display = 'none';
         startBtn.style.display = 'none';
         introBtn.style.display = 'block'; 
@@ -503,15 +499,16 @@
 
     introBtn.addEventListener('click', () => {
         const now = new Date();
-        const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
+        let totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
         const qaBufferSeconds = (parseInt(qaInput.value) || 0) * 60;
         const numPresenters = parseInt(presenterInput.value) || 1;
-        let availablePresenterSeconds = totalMeetingSecondsRemaining - qaBufferSeconds;
-
-        if (availablePresenterSeconds <= 0) {
-            availablePresenterSeconds = 60 * numPresenters; 
-            targetEndTime = new Date(Date.now() + (availablePresenterSeconds + qaBufferSeconds) * 1000);
+        
+        if (totalMeetingSecondsRemaining <= qaBufferSeconds) {
+            totalMeetingSecondsRemaining = qaBufferSeconds + (numPresenters * 300);
+            targetEndTime = new Date(Date.now() + totalMeetingSecondsRemaining * 1000);
         }
+        
+        const availablePresenterSeconds = totalMeetingSecondsRemaining - qaBufferSeconds;
 
         completedSegments.push({
             label: 'Leadership Intro',
@@ -535,7 +532,7 @@
     });
 
     nextBtn.addEventListener('click', () => {
-        const nameUsed = currentNameInput.value.trim() || "Presenter " + currentPresenterIndex;
+        const nameUsed = currentNameInput.value.trim() || ("Presenter " + currentPresenterIndex);
         const actualTimeSpent = secondsSpentInCurrentPhase;
         const individualVariance = allotedTimePerPresenter - actualTimeSpent;
 
@@ -563,7 +560,7 @@
         clearInterval(presenterInterval);
         clearInterval(overallInterval);
 
-        const nameUsed = currentNameInput.value.trim() || "Presenter " + currentPresenterIndex;
+        const nameUsed = currentNameInput.value.trim() || ("Presenter " + currentPresenterIndex);
         const actualTimeSpent = secondsSpentInCurrentPhase;
         const individualVariance = allotedTimePerPresenter - actualTimeSpent;
 
