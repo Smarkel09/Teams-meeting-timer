@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Teams Meeting Presenter Timer</title>
-    <script src="https://office.net"></script>
+    <title>Advanced Teams Meeting Presenter Manager</title>
+    <script src="https://res.cdn.office.net/teams-js/2.13.0/js/MicrosoftTeams.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -55,7 +55,8 @@
             font-size: 0.85rem;
             color: #4b53bc;
             font-weight: 600;
-            margin-top: 10px;
+            margin-top: 5px;
+            margin-bottom: 10px;
             display: none;
         }
         .timer-display {
@@ -99,41 +100,52 @@
             width: 100%;
             transition: background-color 0.2s;
             margin-bottom: 10px;
+            display: none;
         }
-        .start-btn { background-color: #107c41; }
+        .start-btn { background-color: #107c41; display: block; }
         .start-btn:hover { background-color: #0b592e; }
-        .next-btn { background-color: #4b53bc; display: none; }
+        .intro-btn { background-color: #e81123; }
+        .intro-btn:hover { background-color: #b80f1d; }
+        .next-btn { background-color: #4b53bc; }
         .next-btn:hover { background-color: #3b429f; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Dynamic Presenter Timer</h2>
+    <h2>Meeting Manager</h2>
     
-    <!-- Setup Inputs Panel -->
+    <!-- Setup Form -->
     <div class="setup-section" id="setup-panel">
         <label for="end-time">Scheduled Meeting End Time:</label>
         <input type="time" id="end-time" required>
 
         <label for="presenter-count">Number of Presenters:</label>
         <input type="number" id="presenter-count" min="1" value="5" required>
+
+        <label for="qa-buffer">Q&A Buffer (Minutes):</label>
+        <input type="number" id="qa-buffer" min="0" value="5" required>
     </div>
 
+    <!-- Live Presenter Countdown Window -->
     <div class="timer-display" id="timer">00:00</div>
     
+    <!-- Master Schedule Variance Badge -->
     <div class="variance-display on-track" id="variance-box">
-        Schedule Status: <span id="variance">Awaiting Inputs</span>
+        Schedule Status: <span id="variance">Ready to Configure</span>
     </div>
 
-    <!-- Active Details Display -->
+    <!-- Status Message Feed -->
     <div class="info-msg" id="allotment-msg"></div>
 
+    <!-- Active Wall-Clock Hard Stop Remaining -->
     <div class="wall-clock-box" id="wall-box" style="display:none;">
         Time Left in Meeting: <span id="wall-countdown">--:--</span>
     </div>
 
+    <!-- Action Pipeline Controls -->
     <button id="start-btn" class="start-btn">Start Meeting</button>
+    <button id="intro-btn" class="intro-btn">Start Presenters</button>
     <button id="next-btn" class="next-btn">Next Presenter</button>
 </div>
 
@@ -142,7 +154,7 @@
         microsoftTeams.app.initialize().catch(err => console.warn(err));
     }
 
-    let allotedTimePerPresenter = 0; // Will be calculated dynamically in seconds
+    let allotedTimePerPresenter = 0; 
     let timeLeft = 0;
     let accumulatedVariance = 0;
     let presenterInterval = null;
@@ -153,15 +165,17 @@
     const varianceEl = document.getElementById('variance');
     const varianceBox = document.getElementById('variance-box');
     const startBtn = document.getElementById('start-btn');
+    const introBtn = document.getElementById('intro-btn');
     const nextBtn = document.getElementById('next-btn');
     const endTimeInput = document.getElementById('end-time');
     const presenterInput = document.getElementById('presenter-count');
+    const qaInput = document.getElementById('qa-buffer');
     const setupPanel = document.getElementById('setup-panel');
     const wallBox = document.getElementById('wall-box');
     const wallCountdownEl = document.getElementById('wall-countdown');
     const allotmentMsg = document.getElementById('allotment-msg');
 
-    // Auto-fill target end time to 30 minutes from right now as a helpful default
+    // Default target end time auto-populated to 30 minutes out
     const defaultTime = new Date(Date.now() + 30 * 60000);
     endTimeInput.value = `${String(defaultTime.getHours()).padStart(2,'0')}:${String(defaultTime.getMinutes()).padStart(2,'0')}`;
 
@@ -195,40 +209,41 @@
             timeLeft--;
             timerEl.textContent = formatTime(timeLeft);
             if (timeLeft < 0) {
-                timerEl.style.color = '#a80000'; // Turn numbers red during overtime slice
+                timerEl.style.color = '#a80000'; 
             }
         }, 1000);
     }
 
     function calculateDynamicAllotment() {
-        const [hours, minutes] = endTimeInput.value.split(':');
-        targetEndTime = new Date();
-        targetEndTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-
-        if (targetEndTime < new Date()) {
-            targetEndTime.setDate(targetEndTime.getDate() + 1); // Handle midnight rollover safely
-        }
-
         const now = new Date();
         const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
+        const qaBufferSeconds = (parseInt(qaInput.value) || 0) * 60;
         const numPresenters = parseInt(presenterInput.value) || 1;
 
-        if (totalMeetingSecondsRemaining <= 0) {
-            alert("The scheduled end time has already passed! Please choose a future time.");
+        const availablePresenterSeconds = totalMeetingSecondsRemaining - qaBufferSeconds;
+
+        if (availablePresenterSeconds <= 0) {
+            alert("Error: The remaining meeting time is shorter than your Q&A Buffer! Reduce your Q&A time or extend the meeting.");
             return false;
         }
 
-        // Divide meeting time equally by the number of presenters
-        allotedTimePerPresenter = Math.floor(totalMeetingSecondsRemaining / numPresenters);
+        allotedTimePerPresenter = Math.floor(availablePresenterSeconds / numPresenters);
         timeLeft = allotedTimePerPresenter;
 
-        // Display calculated target notification
         allotmentMsg.style.display = 'block';
         allotmentMsg.textContent = `Allotted time per presenter: ${formatTime(allotedTimePerPresenter)}`;
         return true;
     }
 
     function startOverallMeetingClock() {
+        const [hours, minutes] = endTimeInput.value.split(':');
+        targetEndTime = new Date();
+        targetEndTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+        if (targetEndTime < new Date()) {
+            targetEndTime.setDate(targetEndTime.getDate() + 1); 
+        }
+
         overallInterval = setInterval(() => {
             const now = new Date();
             const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
@@ -244,25 +259,39 @@
     }
 
     startBtn.addEventListener('click', () => {
-        if (!calculateDynamicAllotment()) return;
+        const [hours, minutes] = endTimeInput.value.split(':');
+        let checkTime = new Date();
+        checkTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        if (checkTime < new Date()) checkTime.setDate(checkTime.getDate() + 1);
+        if (Math.floor((checkTime - new Date()) / 1000) - (parseInt(qaInput.value) || 0) * 60 <= 0) {
+            alert("The scheduled end time has already passed or is too short for the Q&A buffer!");
+            return;
+        }
 
-        // Transform UI layouts
         setupPanel.style.display = 'none';
         startBtn.style.display = 'none';
-        nextBtn.style.display = 'block';
+        introBtn.style.display = 'block'; 
         wallBox.style.display = 'block';
         
-        varianceEl.textContent = "On Track";
+        timerEl.textContent = "INTRO";
+        timerEl.style.color = '#4b53bc';
+        varianceEl.textContent = "Leadership Intro Loop";
         
-        // Initiate active background tickers
         startOverallMeetingClock();
+    });
+
+    introBtn.addEventListener('click', () => {
+        if (!calculateDynamicAllotment()) return;
+
+        introBtn.style.display = 'none';
+        nextBtn.style.display = 'block'; 
+        
+        updateVarianceUI();
         startPresenterCountdown();
     });
 
     nextBtn.addEventListener('click', () => {
-        // Track the deviation relative to the newly calculated dynamic baseline time slice
         accumulatedVariance += timeLeft;
-        
         timeLeft = allotedTimePerPresenter;
         updateVarianceUI();
         startPresenterCountdown();
