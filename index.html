@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teams Meeting Presenter Timer</title>
-    <!-- Microsoft Teams SDK -->
     <script src="https://office.net"></script>
     <style>
         body {
@@ -17,79 +16,141 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             box-sizing: border-box;
         }
         .container {
             background: white;
-            padding: 20px;
+            padding: 25px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             text-align: center;
             width: 100%;
-            max-width: 320px;
+            max-width: 340px;
         }
-        h2 { margin-top: 0; font-size: 1.2rem; color: #444791; }
+        h2 { margin-top: 0; font-size: 1.3rem; color: #444791; margin-bottom: 5px; }
+        .setup-section {
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .setup-section label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #605e5c;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .setup-section input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #a19f9d;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
         .timer-display {
-            font-size: 3.5rem;
+            font-size: 3.8rem;
             font-weight: bold;
-            margin: 15px 0;
+            margin: 10px 0;
             font-variant-numeric: tabular-nums;
+            color: #a19f9d; /* Grayed out until started */
         }
         .variance-display {
             font-size: 1.1rem;
             font-weight: 600;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             padding: 8px;
             border-radius: 4px;
         }
         .ahead { background-color: #dff6dd; color: #107c41; }
         .behind { background-color: #fde7e9; color: #a80000; }
         .on-track { background-color: #f3f2f1; color: #605e5c; }
+        
+        .wall-clock-box {
+            background-color: #f3f2f1;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            color: #242424;
+            border-left: 4px solid #4b53bc;
+            text-align: left;
+        }
+        .wall-clock-box span { font-weight: bold; float: right; font-variant-numeric: tabular-nums; }
+
         button {
-            background-color: #4b53bc;
             color: white;
             border: none;
-            padding: 12px 24px;
-            font-size: 1rem;
+            padding: 14px 24px;
+            font-size: 1.1rem;
             font-weight: bold;
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
             transition: background-color 0.2s;
+            margin-bottom: 10px;
         }
-        button:hover { background-color: #3b429f; }
-        button:active { background-color: #2e347d; }
+        .start-btn { background-color: #107c41; }
+        .start-btn:hover { background-color: #0b592e; }
+        .next-btn { background-color: #4b53bc; display: none; }
+        .next-btn:hover { background-color: #3b429f; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>Presenter Timer</h2>
-    <div class="timer-display" id="timer">03:00</div>
-    <div class="variance-display on-track" id="variance-box">
-        Schedule: <span id="variance">On Track</span>
+    
+    <!-- Setup Target Time -->
+    <div class="setup-section" id="setup-panel">
+        <label for="end-time">Scheduled Meeting End Time:</label>
+        <input type="time" id="end-time" required>
     </div>
-    <button id="next-btn">Next Presenter</button>
+
+    <div class="timer-display" id="timer">03:00</div>
+    
+    <div class="variance-display on-track" id="variance-box">
+        Schedule Status: <span id="variance">Awaiting Start</span>
+    </div>
+
+    <!-- Overall Hard Stop Countdown display -->
+    <div class="wall-clock-box" id="wall-box" style="display:none;">
+        Time Left in Meeting: <span id="wall-countdown">--:--</span>
+    </div>
+
+    <button id="start-btn" class="start-btn">Start Meeting</button>
+    <button id="next-btn" class="next-btn">Next Presenter</button>
 </div>
 
 <script>
-    // Initialize Microsoft Teams SDK
-    microsoftTeams.app.initialize().then(() => {
-        console.log("Teams SDK initialized successfully.");
-    }).catch(err => {
-        console.error("Teams SDK initialization failed:", err);
-    });
+    // Initialize Teams SDK wrapper safely
+    if (typeof microsoftTeams !== 'undefined' && microsoftTeams.app) {
+        microsoftTeams.app.initialize().catch(err => console.warn(err));
+    }
 
     const ALLOTED_TIME = 180; // 3 minutes in seconds
     let timeLeft = ALLOTED_TIME;
-    let accumulatedVariance = 0; // tracking net seconds saved (+) or lost (-)
-    let timerInterval = null;
+    let accumulatedVariance = 0;
+    let presenterInterval = null;
+    let overallInterval = null;
+    let meetingStarted = false;
+    let targetEndTime = null;
 
     const timerEl = document.getElementById('timer');
     const varianceEl = document.getElementById('variance');
     const varianceBox = document.getElementById('variance-box');
+    const startBtn = document.getElementById('start-btn');
     const nextBtn = document.getElementById('next-btn');
+    const endTimeInput = document.getElementById('end-time');
+    const setupPanel = document.getElementById('setup-panel');
+    const wallBox = document.getElementById('wall-box');
+    const wallCountdownEl = document.getElementById('wall-countdown');
+
+    // Default the target input field to 30 minutes from right now
+    const defaultTime = new Date(Date.now() + 30 * 60000);
+    endTimeInput.value = `${String(defaultTime.getHours()).padStart(2,'0')}:${String(defaultTime.getMinutes()).padStart(2,'0')}`;
 
     function formatTime(seconds) {
         const absSec = Math.abs(seconds);
@@ -112,41 +173,69 @@
         }
     }
 
-    function startTimer() {
-        clearInterval(timerInterval);
-        timerInterval = setInterval(() => {
+    function startPresenterCountdown() {
+        clearInterval(presenterInterval);
+        timerEl.style.color = '#242424';
+        timerEl.textContent = formatTime(timeLeft);
+
+        presenterInterval = setInterval(() => {
             timeLeft--;
-            
-            // If they go into over-time, display negative counts
-            if (timeLeft >= 0) {
-                timerEl.style.color = '#242424';
-                timerEl.textContent = formatTime(timeLeft);
-            } else {
-                timerEl.style.color = '#a80000'; // Change to red for overtime
-                timerEl.textContent = formatTime(timeLeft);
+            timerEl.textContent = formatTime(timeLeft);
+            if (timeLeft < 0) {
+                timerEl.style.color = '#a80000'; // Flash red during overtime slices
             }
         }, 1000);
     }
 
-    function resetForNextPresenter() {
-        // Calculate variance for the presenter who just finished
-        // positive = saved time, negative = overused time
-        const varianceFromCurrentRun = timeLeft; 
-        accumulatedVariance += varianceFromCurrentRun;
-        
-        // Reset timer variables
-        timeLeft = ALLOTED_TIME;
-        timerEl.style.color = '#242424';
-        timerEl.textContent = formatTime(timeLeft);
-        
-        updateVarianceUI();
-        startTimer();
+    function startOverallMeetingClock() {
+        const [hours, minutes] = endTimeInput.value.split(':');
+        targetEndTime = new Date();
+        targetEndTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+        // If time selected has already passed today, assume it rolls into tomorrow
+        if (targetEndTime < new Date()) {
+            targetEndTime.setDate(targetEndTime.getDate() + 1);
+        }
+
+        overallInterval = setInterval(() => {
+            const now = new Date();
+            const differenceInSeconds = Math.floor((targetEndTime - now) / 1000);
+
+            if (differenceInSeconds >= 0) {
+                wallCountdownEl.style.color = '#242424';
+                wallCountdownEl.textContent = formatTime(differenceInSeconds);
+            } else {
+                wallCountdownEl.style.color = '#a80000';
+                wallCountdownEl.textContent = `Overdue: ${formatTime(differenceInSeconds)}`;
+            }
+        }, 1000);
     }
 
-    nextBtn.addEventListener('click', resetForNextPresenter);
+    startBtn.addEventListener('click', () => {
+        meetingStarted = true;
+        
+        // UI Layout Transformations
+        setupPanel.style.display = 'none';
+        startBtn.style.display = 'none';
+        nextBtn.style.display = 'block';
+        wallBox.style.display = 'block';
+        
+        varianceEl.textContent = "On Track";
+        
+        // Fire operational trackers
+        startOverallMeetingClock();
+        startPresenterCountdown();
+    });
 
-    // Auto-start the timer on load
-    startTimer();
+    nextBtn.addEventListener('click', () => {
+        // Factor delta tracking
+        accumulatedVariance += timeLeft;
+        
+        // Reset current slot parameters
+        timeLeft = ALLOTED_TIME;
+        updateVarianceUI();
+        startPresenterCountdown();
+    });
 </script>
 </body>
 </html>
