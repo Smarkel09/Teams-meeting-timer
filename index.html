@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teams Meeting Presenter Timer</title>
+    <title>Dynamic Teams Meeting Presenter Timer</title>
     <script src="https://office.net"></script>
     <style>
         body {
@@ -28,7 +28,7 @@
             width: 100%;
             max-width: 340px;
         }
-        h2 { margin-top: 0; font-size: 1.3rem; color: #444791; margin-bottom: 5px; }
+        h2 { margin-top: 0; font-size: 1.3rem; color: #444791; margin-bottom: 15px; }
         .setup-section {
             border-bottom: 1px solid #e0e0e0;
             padding-bottom: 15px;
@@ -40,6 +40,7 @@
             font-weight: 600;
             color: #605e5c;
             display: block;
+            margin-top: 10px;
             margin-bottom: 5px;
         }
         .setup-section input {
@@ -50,12 +51,19 @@
             box-sizing: border-box;
             font-size: 1rem;
         }
+        .info-msg {
+            font-size: 0.85rem;
+            color: #4b53bc;
+            font-weight: 600;
+            margin-top: 10px;
+            display: none;
+        }
         .timer-display {
             font-size: 3.8rem;
             font-weight: bold;
             margin: 10px 0;
             font-variant-numeric: tabular-nums;
-            color: #a19f9d; /* Grayed out until started */
+            color: #a19f9d; 
         }
         .variance-display {
             font-size: 1.1rem;
@@ -101,21 +109,26 @@
 <body>
 
 <div class="container">
-    <h2>Presenter Timer</h2>
+    <h2>Dynamic Presenter Timer</h2>
     
-    <!-- Setup Target Time -->
+    <!-- Setup Inputs Panel -->
     <div class="setup-section" id="setup-panel">
         <label for="end-time">Scheduled Meeting End Time:</label>
         <input type="time" id="end-time" required>
+
+        <label for="presenter-count">Number of Presenters:</label>
+        <input type="number" id="presenter-count" min="1" value="5" required>
     </div>
 
-    <div class="timer-display" id="timer">03:00</div>
+    <div class="timer-display" id="timer">00:00</div>
     
     <div class="variance-display on-track" id="variance-box">
-        Schedule Status: <span id="variance">Awaiting Start</span>
+        Schedule Status: <span id="variance">Awaiting Inputs</span>
     </div>
 
-    <!-- Overall Hard Stop Countdown display -->
+    <!-- Active Details Display -->
+    <div class="info-msg" id="allotment-msg"></div>
+
     <div class="wall-clock-box" id="wall-box" style="display:none;">
         Time Left in Meeting: <span id="wall-countdown">--:--</span>
     </div>
@@ -125,17 +138,15 @@
 </div>
 
 <script>
-    // Initialize Teams SDK wrapper safely
     if (typeof microsoftTeams !== 'undefined' && microsoftTeams.app) {
         microsoftTeams.app.initialize().catch(err => console.warn(err));
     }
 
-    const ALLOTED_TIME = 180; // 3 minutes in seconds
-    let timeLeft = ALLOTED_TIME;
+    let allotedTimePerPresenter = 0; // Will be calculated dynamically in seconds
+    let timeLeft = 0;
     let accumulatedVariance = 0;
     let presenterInterval = null;
     let overallInterval = null;
-    let meetingStarted = false;
     let targetEndTime = null;
 
     const timerEl = document.getElementById('timer');
@@ -144,11 +155,13 @@
     const startBtn = document.getElementById('start-btn');
     const nextBtn = document.getElementById('next-btn');
     const endTimeInput = document.getElementById('end-time');
+    const presenterInput = document.getElementById('presenter-count');
     const setupPanel = document.getElementById('setup-panel');
     const wallBox = document.getElementById('wall-box');
     const wallCountdownEl = document.getElementById('wall-countdown');
+    const allotmentMsg = document.getElementById('allotment-msg');
 
-    // Default the target input field to 30 minutes from right now
+    // Auto-fill target end time to 30 minutes from right now as a helpful default
     const defaultTime = new Date(Date.now() + 30 * 60000);
     endTimeInput.value = `${String(defaultTime.getHours()).padStart(2,'0')}:${String(defaultTime.getMinutes()).padStart(2,'0')}`;
 
@@ -182,39 +195,58 @@
             timeLeft--;
             timerEl.textContent = formatTime(timeLeft);
             if (timeLeft < 0) {
-                timerEl.style.color = '#a80000'; // Flash red during overtime slices
+                timerEl.style.color = '#a80000'; // Turn numbers red during overtime slice
             }
         }, 1000);
     }
 
-    function startOverallMeetingClock() {
+    function calculateDynamicAllotment() {
         const [hours, minutes] = endTimeInput.value.split(':');
         targetEndTime = new Date();
         targetEndTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-        // If time selected has already passed today, assume it rolls into tomorrow
         if (targetEndTime < new Date()) {
-            targetEndTime.setDate(targetEndTime.getDate() + 1);
+            targetEndTime.setDate(targetEndTime.getDate() + 1); // Handle midnight rollover safely
         }
 
+        const now = new Date();
+        const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
+        const numPresenters = parseInt(presenterInput.value) || 1;
+
+        if (totalMeetingSecondsRemaining <= 0) {
+            alert("The scheduled end time has already passed! Please choose a future time.");
+            return false;
+        }
+
+        // Divide meeting time equally by the number of presenters
+        allotedTimePerPresenter = Math.floor(totalMeetingSecondsRemaining / numPresenters);
+        timeLeft = allotedTimePerPresenter;
+
+        // Display calculated target notification
+        allotmentMsg.style.display = 'block';
+        allotmentMsg.textContent = `Allotted time per presenter: ${formatTime(allotedTimePerPresenter)}`;
+        return true;
+    }
+
+    function startOverallMeetingClock() {
         overallInterval = setInterval(() => {
             const now = new Date();
-            const differenceInSeconds = Math.floor((targetEndTime - now) / 1000);
+            const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
 
-            if (differenceInSeconds >= 0) {
+            if (totalMeetingSecondsRemaining >= 0) {
                 wallCountdownEl.style.color = '#242424';
-                wallCountdownEl.textContent = formatTime(differenceInSeconds);
+                wallCountdownEl.textContent = formatTime(totalMeetingSecondsRemaining);
             } else {
                 wallCountdownEl.style.color = '#a80000';
-                wallCountdownEl.textContent = `Overdue: ${formatTime(differenceInSeconds)}`;
+                wallCountdownEl.textContent = `Overdue: ${formatTime(totalMeetingSecondsRemaining)}`;
             }
         }, 1000);
     }
 
     startBtn.addEventListener('click', () => {
-        meetingStarted = true;
-        
-        // UI Layout Transformations
+        if (!calculateDynamicAllotment()) return;
+
+        // Transform UI layouts
         setupPanel.style.display = 'none';
         startBtn.style.display = 'none';
         nextBtn.style.display = 'block';
@@ -222,17 +254,16 @@
         
         varianceEl.textContent = "On Track";
         
-        // Fire operational trackers
+        // Initiate active background tickers
         startOverallMeetingClock();
         startPresenterCountdown();
     });
 
     nextBtn.addEventListener('click', () => {
-        // Factor delta tracking
+        // Track the deviation relative to the newly calculated dynamic baseline time slice
         accumulatedVariance += timeLeft;
         
-        // Reset current slot parameters
-        timeLeft = ALLOTED_TIME;
+        timeLeft = allotedTimePerPresenter;
         updateVarianceUI();
         startPresenterCountdown();
     });
