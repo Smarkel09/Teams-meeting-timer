@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Teams Meeting Presenter Manager</title>
+    <title>Ultimate Teams Meeting Presenter Manager</title>
     <script src="https://res.cdn.office.net/teams-js/2.13.0/js/MicrosoftTeams.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f3f2f1;
             color: #242424;
-            padding: 15px;
+            padding: 20px;
             margin: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             min-height: 100vh;
             box-sizing: border-box;
         }
@@ -26,16 +25,18 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             text-align: center;
             width: 100%;
-            max-width: 340px;
+            max-width: 480px;
+            margin-bottom: 20px;
         }
-        h2 { margin-top: 0; font-size: 1.3rem; color: #444791; margin-bottom: 15px; }
+        h2 { margin-top: 0; font-size: 1.4rem; color: #444791; margin-bottom: 15px; }
+        
         .setup-section {
             border-bottom: 1px solid #e0e0e0;
             padding-bottom: 15px;
             margin-bottom: 15px;
             text-align: left;
         }
-        .setup-section label {
+        .setup-section label, .live-input-section label {
             font-size: 0.85rem;
             font-weight: 600;
             color: #605e5c;
@@ -43,7 +44,7 @@
             margin-top: 10px;
             margin-bottom: 5px;
         }
-        .setup-section input {
+        .setup-section input, .live-input-section input {
             width: 100%;
             padding: 8px;
             border: 1px solid #a19f9d;
@@ -51,16 +52,9 @@
             box-sizing: border-box;
             font-size: 1rem;
         }
-        .info-msg {
-            font-size: 0.85rem;
-            color: #4b53bc;
-            font-weight: 600;
-            margin-top: 5px;
-            margin-bottom: 10px;
-            display: none;
-        }
+
         .timer-display {
-            font-size: 3.8rem;
+            font-size: 4rem;
             font-weight: bold;
             margin: 10px 0;
             font-variant-numeric: tabular-nums;
@@ -77,12 +71,48 @@
         .behind { background-color: #fde7e9; color: #a80000; }
         .on-track { background-color: #f3f2f1; color: #605e5c; }
         
+        .timeline-wrapper {
+            width: 100%;
+            background-color: #f3f2f1;
+            height: 30px;
+            border-radius: 6px;
+            margin: 20px 0;
+            overflow: hidden;
+            display: flex;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .timeline-segment {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: bold;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            transition: width 0.3s ease;
+            padding: 0 2px;
+        }
+        .seg-intro { background-color: #8f64ab; }
+        .seg-presenter { background-color: #0078d4; border-right: 1px solid rgba(255,255,255,0.3); }
+        .seg-current { background-color: #107c41; animation: pulse 2s infinite; }
+        .seg-qa { background-color: #ffb900; color: #242424; }
+        .seg-remaining { background-color: #e1dfdd; color: #605e5c; }
+
+        @keyframes pulse {
+            0% { opacity: 0.85; }
+            50% { opacity: 1; }
+            100% { opacity: 0.85; }
+        }
+
         .wall-clock-box {
             background-color: #f3f2f1;
             padding: 10px;
             border-radius: 4px;
             font-size: 0.9rem;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             color: #242424;
             border-left: 4px solid #4b53bc;
             text-align: left;
@@ -108,6 +138,35 @@
         .intro-btn:hover { background-color: #b80f1d; }
         .next-btn { background-color: #4b53bc; }
         .next-btn:hover { background-color: #3b429f; }
+
+        .table-container {
+            width: 100%;
+            max-width: 480px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+        th {
+            background-color: #444791;
+            color: white;
+            padding: 10px;
+            font-weight: 600;
+        }
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        tr:last-child td { border-bottom: none; }
+        .text-ahead { color: #107c41; font-weight: bold; }
+        .text-behind { color: #a80000; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -115,38 +174,51 @@
 <div class="container">
     <h2>Meeting Manager</h2>
     
-    <!-- Setup Form -->
     <div class="setup-section" id="setup-panel">
         <label for="end-time">Scheduled Meeting End Time:</label>
         <input type="time" id="end-time" required>
 
         <label for="presenter-count">Number of Presenters:</label>
-        <input type="number" id="presenter-count" min="1" value="5" required>
+        <input type="number" id="presenter-count" min="1" value="3" required>
 
         <label for="qa-buffer">Q&A Buffer (Minutes):</label>
         <input type="number" id="qa-buffer" min="0" value="5" required>
     </div>
 
-    <!-- Live Presenter Countdown Window -->
-    <div class="timer-display" id="timer">00:00</div>
-    
-    <!-- Master Schedule Variance Badge -->
-    <div class="variance-display on-track" id="variance-box">
-        Schedule Status: <span id="variance">Ready to Configure</span>
+    <div class="live-input-section" id="live-name-panel" style="display: none; text-align: left; margin-bottom: 15px;">
+        <label for="current-presenter-name">Active Presenter Identity:</label>
+        <input type="text" id="current-presenter-name" value="Presenter 1">
     </div>
 
-    <!-- Status Message Feed -->
-    <div class="info-msg" id="allotment-msg"></div>
+    <div class="timeline-wrapper" id="timeline-bar" style="display: none;"></div>
 
-    <!-- Active Wall-Clock Hard Stop Remaining -->
+    <div class="timer-display" id="timer">00:00</div>
+    
+    <div class="variance-display on-track" id="variance-box">
+        Schedule Status: <span id="variance">Awaiting Configuration</span>
+    </div>
+
     <div class="wall-clock-box" id="wall-box" style="display:none;">
         Time Left in Meeting: <span id="wall-countdown">--:--</span>
     </div>
 
-    <!-- Action Pipeline Controls -->
     <button id="start-btn" class="start-btn">Start Meeting</button>
     <button id="intro-btn" class="intro-btn">Start Presenters</button>
     <button id="next-btn" class="next-btn">Next Presenter</button>
+</div>
+
+<div class="table-container" id="report-panel">
+    <table>
+        <thead>
+            <tr>
+                <th>Presenter Name</th>
+                <th>Allotted</th>
+                <th>Actual Used</th>
+                <th>Variance</th>
+            </tr>
+        </thead>
+        <tbody id="report-body"></tbody>
+    </table>
 </div>
 
 <script>
@@ -159,7 +231,14 @@
     let accumulatedVariance = 0;
     let presenterInterval = null;
     let overallInterval = null;
+    
+    let startTime = null;
     let targetEndTime = null;
+    let totalMeetingSeconds = 0;
+    
+    let currentPresenterIndex = 1;
+    let secondsSpentInCurrentPhase = 0;
+    let completedSegments = []; 
 
     const timerEl = document.getElementById('timer');
     const varianceEl = document.getElementById('variance');
@@ -171,11 +250,14 @@
     const presenterInput = document.getElementById('presenter-count');
     const qaInput = document.getElementById('qa-buffer');
     const setupPanel = document.getElementById('setup-panel');
+    const liveNamePanel = document.getElementById('live-name-panel');
+    const currentNameInput = document.getElementById('current-presenter-name');
     const wallBox = document.getElementById('wall-box');
     const wallCountdownEl = document.getElementById('wall-countdown');
-    const allotmentMsg = document.getElementById('allotment-msg');
+    const timelineBar = document.getElementById('timeline-bar');
+    const reportPanel = document.getElementById('report-panel');
+    const reportBody = document.getElementById('report-body');
 
-    // Default target end time auto-populated to 30 minutes out
     const defaultTime = new Date(Date.now() + 30 * 60000);
     endTimeInput.value = `${String(defaultTime.getHours()).padStart(2,'0')}:${String(defaultTime.getMinutes()).padStart(2,'0')}`;
 
@@ -185,6 +267,53 @@
         const secs = absSec % 60;
         const sign = seconds < 0 ? "-" : "";
         return `${sign}${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function drawTimeline() {
+        if (!totalMeetingSeconds) return;
+        timelineBar.innerHTML = '';
+
+        completedSegments.forEach(seg => {
+            const widthPct = (seg.duration / totalMeetingSeconds) * 100;
+            if (widthPct <= 0) return;
+            const div = document.createElement('div');
+            div.className = `timeline-segment ${seg.className}`;
+            div.style.width = `${widthPct}%`;
+            div.textContent = seg.label;
+            div.title = `${seg.label} (${formatTime(seg.duration)})`;
+            timelineBar.appendChild(div);
+        });
+
+        const activeWidthPct = (secondsSpentInCurrentPhase / totalMeetingSeconds) * 100;
+        if (activeWidthPct > 0) {
+            const div = document.createElement('div');
+            const isIntro = startBtn.style.display === 'none' && introBtn.style.display === 'block';
+            div.className = `timeline-segment seg-current`;
+            div.style.width = `${activeWidthPct}%`;
+            div.textContent = isIntro ? "Intro" : currentNameInput.value;
+            timelineBar.appendChild(div);
+        }
+
+        const qaSeconds = (parseInt(qaInput.value) || 0) * 60;
+        const qaWidthPct = (qaSeconds / totalMeetingSeconds) * 100;
+        if (qaWidthPct > 0) {
+            const div = document.createElement('div');
+            div.className = 'timeline-segment seg-qa';
+            div.style.width = `${qaWidthPct}%`;
+            div.textContent = 'Q&A';
+            timelineBar.appendChild(div);
+        }
+
+        const totalUsedSoFar = completedSegments.reduce((sum, s) => sum + s.duration, 0) + secondsSpentInCurrentPhase + qaSeconds;
+        const remainingSeconds = totalMeetingSeconds - totalUsedSoFar;
+        const remWidthPct = (remainingSeconds / totalMeetingSeconds) * 100;
+        if (remWidthPct > 0) {
+            const div = document.createElement('div');
+            div.className = 'timeline-segment seg-remaining';
+            div.style.width = `${remWidthPct}%`;
+            div.textContent = '';
+            timelineBar.appendChild(div);
+        }
     }
 
     function updateVarianceUI() {
@@ -200,49 +329,48 @@
         }
     }
 
+    function appendToAnalyticsTable(name, allotted, actual, variance) {
+        const row = document.createElement('tr');
+        const varClass = variance > 0 ? 'text-ahead' : (variance < 0 ? 'text-behind' : '');
+        const varSign = variance > 0 ? '+' : '';
+
+        row.innerHTML = `
+            <td><strong>${name}</strong></td>
+            <td>${formatTime(allotted)}</td>
+            <td>${formatTime(actual)}</td>
+            <td class="${varClass}">${varSign}${formatTime(variance)}</td>
+        `;
+        reportBody.appendChild(row);
+    }
+
     function startPresenterCountdown() {
         clearInterval(presenterInterval);
         timerEl.style.color = '#242424';
         timerEl.textContent = formatTime(timeLeft);
+        secondsSpentInCurrentPhase = 0;
 
         presenterInterval = setInterval(() => {
             timeLeft--;
+            secondsSpentInCurrentPhase++;
             timerEl.textContent = formatTime(timeLeft);
             if (timeLeft < 0) {
                 timerEl.style.color = '#a80000'; 
             }
+            drawTimeline();
         }, 1000);
     }
 
-    function calculateDynamicAllotment() {
-        const now = new Date();
-        const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
-        const qaBufferSeconds = (parseInt(qaInput.value) || 0) * 60;
-        const numPresenters = parseInt(presenterInput.value) || 1;
-
-        const availablePresenterSeconds = totalMeetingSecondsRemaining - qaBufferSeconds;
-
-        if (availablePresenterSeconds <= 0) {
-            alert("Error: The remaining meeting time is shorter than your Q&A Buffer! Reduce your Q&A time or extend the meeting.");
-            return false;
-        }
-
-        allotedTimePerPresenter = Math.floor(availablePresenterSeconds / numPresenters);
-        timeLeft = allotedTimePerPresenter;
-
-        allotmentMsg.style.display = 'block';
-        allotmentMsg.textContent = `Allotted time per presenter: ${formatTime(allotedTimePerPresenter)}`;
-        return true;
-    }
-
     function startOverallMeetingClock() {
+        startTime = new Date();
         const [hours, minutes] = endTimeInput.value.split(':');
         targetEndTime = new Date();
         targetEndTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-        if (targetEndTime < new Date()) {
+        if (targetEndTime < startTime) {
             targetEndTime.setDate(targetEndTime.getDate() + 1); 
         }
+
+        totalMeetingSeconds = Math.floor((targetEndTime - startTime) / 1000);
 
         overallInterval = setInterval(() => {
             const now = new Date();
@@ -272,28 +400,71 @@
         startBtn.style.display = 'none';
         introBtn.style.display = 'block'; 
         wallBox.style.display = 'block';
+        timelineBar.style.display = 'flex';
         
         timerEl.textContent = "INTRO";
-        timerEl.style.color = '#4b53bc';
+        timerEl.style.color = '#8f64ab';
         varianceEl.textContent = "Leadership Intro Loop";
         
+        secondsSpentInCurrentPhase = 0;
         startOverallMeetingClock();
+        
+        presenterInterval = setInterval(() => {
+            secondsSpentInCurrentPhase++;
+            drawTimeline();
+        }, 1000);
     });
 
     introBtn.addEventListener('click', () => {
-        if (!calculateDynamicAllotment()) return;
+        const now = new Date();
+        const totalMeetingSecondsRemaining = Math.floor((targetEndTime - now) / 1000);
+        const qaBufferSeconds = (parseInt(qaInput.value) || 0) * 60;
+        const numPresenters = parseInt(presenterInput.value) || 1;
+        const availablePresenterSeconds = totalMeetingSecondsRemaining - qaBufferSeconds;
+
+        if (availablePresenterSeconds <= 0) {
+            alert("Error: Meeting window is too small for that Q&A Buffer size!");
+            return;
+        }
+
+        completedSegments.push({
+            label: 'Intro',
+            duration: secondsSpentInCurrentPhase,
+            className: 'seg-intro'
+        });
+
+        allotedTimePerPresenter = Math.floor(availablePresenterSeconds / numPresenters);
+        timeLeft = allotedTimePerPresenter;
 
         introBtn.style.display = 'none';
         nextBtn.style.display = 'block'; 
+        liveNamePanel.style.display = 'block';
+        reportPanel.style.display = 'block';
         
         updateVarianceUI();
         startPresenterCountdown();
     });
 
     nextBtn.addEventListener('click', () => {
+        const nameUsed = currentNameInput.value.trim() || `Presenter ${currentPresenterIndex}`;
+        const actualTimeSpent = secondsSpentInCurrentPhase;
+        const individualVariance = allotedTimePerPresenter - actualTimeSpent;
+
+        appendToAnalyticsTable(nameUsed, allotedTimePerPresenter, actualTimeSpent, individualVariance);
+
+        completedSegments.push({
+            label: nameUsed,
+            duration: actualTimeSpent,
+            className: 'seg-presenter'
+        });
+
         accumulatedVariance += timeLeft;
-        timeLeft = allotedTimePerPresenter;
         updateVarianceUI();
+
+        currentPresenterIndex++;
+        currentNameInput.value = `Presenter ${currentPresenterIndex}`;
+        
+        timeLeft = allotedTimePerPresenter;
         startPresenterCountdown();
     });
 </script>
