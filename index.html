@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teams Meeting Presenter Timer</title>
+    <!-- Microsoft Teams SDK -->
+    <script src="https://office.net"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f3f2f1;
+            color: #242424;
+            padding: 15px;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 320px;
+        }
+        h2 { margin-top: 0; font-size: 1.2rem; color: #444791; }
+        .timer-display {
+            font-size: 3.5rem;
+            font-weight: bold;
+            margin: 15px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .variance-display {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .ahead { background-color: #dff6dd; color: #107c41; }
+        .behind { background-color: #fde7e9; color: #a80000; }
+        .on-track { background-color: #f3f2f1; color: #605e5c; }
+        button {
+            background-color: #4b53bc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #3b429f; }
+        button:active { background-color: #2e347d; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Presenter Timer</h2>
+    <div class="timer-display" id="timer">03:00</div>
+    <div class="variance-display on-track" id="variance-box">
+        Schedule: <span id="variance">On Track</span>
+    </div>
+    <button id="next-btn">Next Presenter</button>
+</div>
+
+<script>
+    // Initialize Microsoft Teams SDK
+    microsoftTeams.app.initialize().then(() => {
+        console.log("Teams SDK initialized successfully.");
+    }).catch(err => {
+        console.error("Teams SDK initialization failed:", err);
+    });
+
+    const ALLOTED_TIME = 180; // 3 minutes in seconds
+    let timeLeft = ALLOTED_TIME;
+    let accumulatedVariance = 0; // tracking net seconds saved (+) or lost (-)
+    let timerInterval = null;
+
+    const timerEl = document.getElementById('timer');
+    const varianceEl = document.getElementById('variance');
+    const varianceBox = document.getElementById('variance-box');
+    const nextBtn = document.getElementById('next-btn');
+
+    function formatTime(seconds) {
+        const absSec = Math.abs(seconds);
+        const mins = Math.floor(absSec / 60);
+        const secs = absSec % 60;
+        const sign = seconds < 0 ? "-" : "";
+        return `${sign}${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function updateVarianceUI() {
+        if (accumulatedVariance > 0) {
+            varianceBox.className = "variance-display ahead";
+            varianceEl.textContent = `${formatTime(accumulatedVariance)} Ahead`;
+        } else if (accumulatedVariance < 0) {
+            varianceBox.className = "variance-display behind";
+            varianceEl.textContent = `${formatTime(accumulatedVariance)} Behind`;
+        } else {
+            varianceBox.className = "variance-display on-track";
+            varianceEl.textContent = "On Track";
+        }
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            
+            // If they go into over-time, display negative counts
+            if (timeLeft >= 0) {
+                timerEl.style.color = '#242424';
+                timerEl.textContent = formatTime(timeLeft);
+            } else {
+                timerEl.style.color = '#a80000'; // Change to red for overtime
+                timerEl.textContent = formatTime(timeLeft);
+            }
+        }, 1000);
+    }
+
+    function resetForNextPresenter() {
+        // Calculate variance for the presenter who just finished
+        // positive = saved time, negative = overused time
+        const varianceFromCurrentRun = timeLeft; 
+        accumulatedVariance += varianceFromCurrentRun;
+        
+        // Reset timer variables
+        timeLeft = ALLOTED_TIME;
+        timerEl.style.color = '#242424';
+        timerEl.textContent = formatTime(timeLeft);
+        
+        updateVarianceUI();
+        startTimer();
+    }
+
+    nextBtn.addEventListener('click', resetForNextPresenter);
+
+    // Auto-start the timer on load
+    startTimer();
+</script>
+</body>
+</html>
